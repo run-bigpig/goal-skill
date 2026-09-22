@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goal 规划向导"
+  short_description: "逐轮澄清模糊需求，结合项目证据完善可验收计划，再授权启动 Goal"
+  default_prompt: "使用 $goal-skill，帮我把下面的模糊任务逐步完善成可验收计划；按需要查阅当前项目，计划确认后再启动 Goal。"

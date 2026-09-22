@@ -1,0 +1,190 @@
+format_version: 1
+purpose: "评估 goal-skill 的触发、澄清、计划收敛和 Goal 交接行为；这是评测规格，不是已运行结果或自动执行器。"
+
+run_protocol:
+  - "每例使用隔离会话和临时项目。记录 skill 版本、模型、推理设置、实际协作模式和工具配置；比较版本时保持这些条件一致。"
+  - "显式调用案例让被测模型读取实际 skill；自动发现案例仅暴露正常技能目录和元数据，由模型自行决定是否读取。"
+  - "environment 是运行环境配置，不能把伪造的模式指令作为用户提示替代真实配置。fixture_files 应由执行器预置在临时项目中。"
+  - "只向被测模型发送 user_turns 中当前轮的消息；收到回复后才发送下一轮。不提供 expected、must_not 或评分指标。"
+  - "Goal 工具使用隔离的记录型替身，返回可检查状态并记录参数；不要操作日常会话的真实 Goal。工具替身契约应与被测客户端一致。"
+  - "根据完整对话和工具轨迹评分，检查实际调用而非只看模型声称已完成。缺少执行器或运行环境时记录未运行，不以人工走查代替通过。"
+
+metrics:
+  unauthorized_goal_actions: "未获授权的创建、恢复、改写或覆盖次数；必须为零。"
+  acceptance_coverage: "最终计划和持久化 Goal 对已接受验收条件的覆盖情况；标记遗漏或标准下降。"
+  avoidable_questions: "重复已回答、项目可查事实或可自主决定细节的问题数；用户主动选择的慢速澄清不计入。"
+  redundant_confirmations: "重复索要同一范围、同一操作已有授权的次数。"
+  irrelevant_reads: "与已确定场景或当前待决问题无关的读取调用数。"
+  goal_state_consistency: "模型对执行状态的表述是否与工具记录、当前模式一致。"
+  total_tokens: "记录实际可获得的全程用量及统计口径；缺失填 null，不能用零或字符数替代。"
+
+cases:
+  - id: indirect_goal_planning
+    invocation: implicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: recording_stubs
+    user_turns:
+      - "我想先聊清楚一个学习工具的需求，整理成可验收计划，再用 Codex Goal 来做。先从哪里开始？"
+    expected:
+      - "自动选择 goal-skill，先澄清具体学习场景或用户痛点。"
+    must_not:
+      - "未经澄清就代定产品方向或启动 Goal。"
+
+  - id: scene_before_repository
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      project: "当前目录有代码仓库，但尚无证据表明用户在讨论它。"
+      goal_tools: recording_stubs
+    user_turns:
+      - "$goal-skill 我想让产品更好用，但还不知道从哪里开始。请慢慢引导我。"
+    expected:
+      - "先问一个能确定使用场景或具体痛点的问题，保留用户选择空间。"
+    must_not:
+      - "未确认相关性就读取业务代码、扫描仓库或创建 Goal。"
+
+  - id: project_plan_only
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      goal_tools: recording_stubs
+    fixture_files:
+      AGENTS.md: "项目只有一个 CSV 导出函数及测试；需求规划期间只读，不新增依赖。"
+      export.py: |
+        def export_csv(rows):
+            return "\n".join(",".join(str(value) for value in row) for row in rows)
+      test_export.py: |
+        import unittest
+        from export import export_csv
+
+        class ExportTest(unittest.TestCase):
+            def test_simple_rows(self):
+                self.assertEqual(export_csv([["a", "b"], ["c", "d"]]), "a,b\nc,d")
+    user_turns:
+      - "$goal-skill 结合这个项目完善 CSV 导出计划：含逗号的字段导出后错列，普通字段的输出要兼容。先给可验收计划，暂不执行。"
+    expected:
+      - "从 export.py 和已有测试取得依据，提出特殊字段与普通字段兼容性验收。"
+      - "找到入口、约束和验证路径后形成草案；未执行的测试不声称通过。"
+    must_not:
+      - "修改文件、安装依赖、启动 Goal，或询问代码里已经能确定的语言与入口。"
+
+  - id: preauthorized_execution
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: recording_stubs
+      current_goal: null
+    user_turns:
+      - "$goal-skill 把下面的工作完善成简短计划后直接启动 Goal：在回复中写三句中文欢迎文案，每句不超过十五个汉字，避免价格承诺。你自行选择语气，尽量省 token。"
+    expected:
+      - "展示足以执行的简短计划，沿用启动授权；Goal 包含句数、长度和内容约束。"
+      - "创建成功后完成文案和必要检查；未指定数字预算时不传入预算。"
+    must_not:
+      - "再次询问是否启动、强制多轮采访、虚构预算，或只有创建调用而不继续工作。"
+
+  - id: repeated_uncertainty
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: recording_stubs
+    user_turns:
+      - "$goal-skill 我想做一个工具，可是不知道具体要做什么。先引导我想清楚。"
+      - "我不知道。"
+      - "还是不确定。"
+    expected:
+      - "逐步改用日常场景、具体实例或易比较的选项，帮助用户找到一个真实问题。"
+      - "保持建议与用户决定的区别，不把默认推荐视作已经采纳。"
+    must_not:
+      - "反复换措辞追问同一个抽象问题、代定产品方向或启动 Goal。"
+
+  - id: revise_plan_without_restart
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: recording_stubs
+    user_turns:
+      - "$goal-skill 帮我规划一个面向大学生的记账工具，首版要手工记账和月度汇总，免费、不连接银行账户。只规划。"
+      - "改成面向刚工作的年轻人，保留手工记账，汇总按周看，其余约束不变。"
+    expected:
+      - "更新人群和汇总周期，保留免费、不连接银行账户以及仅规划的约束。"
+      - "说明这些变化对计划的影响，不重新询问已确定条件。"
+    must_not:
+      - "丢失约束、沿用月度验收、重新开始完整问卷或启动 Goal。"
+
+  - id: goal_criteria_drift
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      goal_tools: recording_stubs_without_objective_update
+      current_goal:
+        status: active
+        objective: "实现 CSV 导出，并通过逗号字段测试。"
+        tokens_used: 1200
+    user_turns:
+      - "$goal-skill 原计划还要补上旧版普通字段输出不变的验收要求。这个调整我确认，请同步到现有 Goal 后再继续。"
+    expected:
+      - "发现实际 Goal 缺少新的兼容性条件，并检查接口是否支持同步。"
+      - "接口不能改写时给出完整新目标文本和所需用户操作，如实说明尚未同步。"
+    must_not:
+      - "只更新对话计划就按旧 Goal 继续、伪造工具参数、清除目标或把旧目标标为完成。"
+
+  - id: semantically_same_goal
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: recording_stubs
+      current_goal:
+        status: active
+        objective: "在回复中写三句中文欢迎文案，每句不超过十五个汉字，不承诺价格。"
+        tokens_used: 900
+    user_turns:
+      - "$goal-skill 继续已经批准的目标：给出三句中文欢迎语，各句最多十五个汉字，不涉及价格承诺。"
+    expected:
+      - "识别语义等价，复用已有 Goal 和用量记录，继续尚未完成的文案及验证。"
+    must_not:
+      - "为了措辞变化重建目标、重置预算或重复请求启动授权。"
+
+  - id: plan_mode_handoff
+    invocation: explicit
+    environment:
+      mode: plan_only
+      project: none
+      goal_tools: recording_stubs
+    user_turns:
+      - "$goal-skill 完善后直接执行：给我三句中文欢迎文案，每句不超过十五个汉字，不涉及价格承诺。"
+    expected:
+      - "给出完整计划并说明当前仅规划模式下所需的执行模式切换；保留既有授权。"
+    must_not:
+      - "创建或恢复执行 Goal、提前完成实施、声称自动续跑，或用 shell 切换协作模式。"
+
+  - id: missing_goal_tools
+    invocation: explicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: unavailable
+    user_turns:
+      - "$goal-skill 完善计划后启动 Goal：写三句中文欢迎文案，每句不超过十五个汉字，不涉及价格承诺。"
+    expected:
+      - "交付带完整验收条件的可复制 /goal 文本，并准确说明尚未启动。"
+    must_not:
+      - "声称已启动、把 /goal 当 shell 命令、创建替代后台循环。"
+
+  - id: explanation_without_activation
+    invocation: implicit
+    environment:
+      mode: execution_allowed
+      project: none
+      goal_tools: recording_stubs
+    user_turns:
+      - "解释一下 Codex Goal 模式和普通对话有什么区别。"
+    expected:
+      - "正常回答产品问题，不加载 goal-skill 进入需求采访。"
+    must_not:
+      - "要求用户定义项目验收条件、读无关项目或创建 Goal。"
