@@ -34,7 +34,39 @@
 
 仓库根目录就是 skill 目录，名称为 `goal-skill`。以下安装方式任选一种，避免在多个目录重复安装同名 skill。
 
-### 方法一：让 Codex 安装
+### 方法一：通过 npx 安装（推荐）
+
+需要 Node.js（包含 `npx`）和 Git。在终端运行：
+
+```bash
+npx skills add run-bigpig/goal-skill
+```
+
+默认安装到当前项目。若只安装到 Codex，可以明确指定：
+
+```bash
+npx skills add run-bigpig/goal-skill --skill goal-skill --agent codex
+```
+
+要跨项目使用，添加 `--global`：
+
+```bash
+npx skills add run-bigpig/goal-skill --skill goal-skill --agent codex --global
+```
+
+项目级安装会放入 `.agents/skills/goal-skill/`；全局路径由 Skills CLI 为 Codex 配置的用户目录决定。已有其他方式安装的副本时，先检查目标位置和本地修改，避免重复安装或覆盖定制。
+
+只查看仓库中可安装的 skill：
+
+```bash
+npx skills add run-bigpig/goal-skill --list
+```
+
+需要跳过确认时，可以使用 `npx --yes skills add run-bigpig/goal-skill --skill goal-skill --agent codex --yes`。前一个 `--yes` 用于 npx 下载 CLI，后一个用于 Skills CLI 安装确认。环境不支持符号链接时可附加 `--copy`。
+
+这里的 `skills` 是 [Skills CLI](https://github.com/vercel-labs/skills)，`run-bigpig/goal-skill` 是 GitHub 仓库地址。本 skill 直接从仓库安装，不需要单独的 npm 包。
+
+### 方法二：让 Codex 安装
 
 在 Codex 对话中输入：
 
@@ -45,7 +77,7 @@ skill 位于仓库根目录，路径为 .，安装名称为 goal-skill。
 
 安装器会使用当前环境配置的 skills 目录。安装后在下一轮输入 `$goal-skill`；如果技能列表没有刷新，重启 Codex。
 
-### 方法二：Git 克隆到个人 skills 目录
+### 方法三：Git 克隆到个人 skills 目录
 
 当前官方文档推荐个人 skills 使用 `~/.agents/skills`。macOS、Linux 或 WSL：
 
@@ -65,7 +97,7 @@ if ($LASTEXITCODE -ne 0) { throw 'goal-skill clone failed' }
 
 部分安装器或既有环境使用 `$CODEX_HOME/skills`，默认可能是 `~/.codex/skills`。已有安装能被识别时继续使用该位置即可，不必再克隆一份。目录已存在时，先判断它是 Git 克隆还是安装器下载的副本，再按下文更新。
 
-### 方法三：仅在某个项目使用
+### 方法四：手动放入某个项目
 
 将本仓库的完整内容放入项目的 `.agents/skills/goal-skill/`，确保结构是：
 
@@ -178,6 +210,18 @@ $goal-skill 结合当前项目完善这个任务：
 
 ## 更新
 
+通过 Skills CLI 安装的副本，可按原来的安装范围更新本 skill：
+
+```bash
+# 更新当前项目安装
+npx skills update goal-skill --project
+
+# 更新全局安装
+npx skills update goal-skill --global
+```
+
+更新会重新获取上游内容；本地有定制时先保留修改。
+
 通过 Git 克隆安装的副本，可以在确认没有需要保留的未提交修改后更新：
 
 ```bash
@@ -202,6 +246,8 @@ goal-skill/
 ```
 
 ## 验证状态与贡献
+
+安装链路已使用 Node.js 24.19.0 和 Skills CLI 1.7.0 验证：`--list` 能发现 skill，Codex 项目级安装成功，指令、交接参考、UI 元数据和评测案例与仓库源文件一致。这是安装兼容性验证，不代表原生 Goal 行为评测通过。
 
 当前已完成 skill 结构、UI 元数据、引用链接、YAML 案例格式和文件空白检查。`evals/cases.yaml` 是评测规格，不是自动运行器，也不代表 11 个案例已经通过模型实测。尚未据此给出行为通过率或 token 节省数据。
 
@@ -229,6 +275,7 @@ goal-skill/
 
 ## 参考资料
 
+- [Skills CLI：安装与更新命令](https://github.com/vercel-labs/skills)
 - [OpenAI：Build skills](https://developers.openai.com/codex/skills)
 - [OpenAI：Using Goals in Codex](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
 - [OpenAI：Manage a thread goal](https://learn.chatgpt.com/docs/app-server#manage-a-thread-goal)
